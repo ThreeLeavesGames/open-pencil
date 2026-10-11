@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import CanvasKitInit, { type CanvasKit } from 'canvaskit-wasm'
 
+import { bundledAssetURL } from './asset-url'
 import { IS_BROWSER } from './constants'
 
 let instance: CanvasKit | null = null
@@ -19,7 +20,7 @@ export async function getCanvasKit(options?: CanvasKitOptions): Promise<CanvasKi
     }
     const base = 'env' in import.meta ? import.meta.env.BASE_URL : '/'
     const prefix = base === '/' ? '' : base.replace(/\/$/, '')
-    return `${prefix}/${file}`
+    return bundledAssetURL(`${prefix}/${file}`)
   }
 
   instance = await CanvasKitInit({

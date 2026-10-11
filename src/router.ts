@@ -1,9 +1,10 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createMemoryHistory, createRouter, createWebHistory } from 'vue-router'
 
 import WorkspaceView from './views/WorkspaceView.vue'
 
 const router = createRouter({
-  history: createWebHistory(),
+  // A VS Code webview's URL is not an app route, so routing stays in memory there.
+  history: window.__openPencilVSCodeHost ? createMemoryHistory() : createWebHistory(),
   routes: [
     { path: '/', component: WorkspaceView },
     { path: '/storage', redirect: '/' },

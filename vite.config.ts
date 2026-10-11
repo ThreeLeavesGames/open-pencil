@@ -31,6 +31,8 @@ const automationRoute = localAutomationRoute(host)
 export default defineConfig(async ({ command }) => {
   await Promise.all([ensureBrandAssets(['web']), ensureDemoDocument()])
   return {
+    // The VS Code extension builds with './' so the app loads from its webview folder.
+    base: process.env.OPENPENCIL_BASE ?? '/',
     resolve: {
       alias: createOpenPencilAliases(__dirname)
     },

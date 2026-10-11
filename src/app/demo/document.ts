@@ -3,7 +3,7 @@ import type { EditorStore } from '@/app/editor/session'
 import { fitDemoPagesOnFirstVisit } from './viewport'
 
 /** Built from `tools/generate/demo` before the app is served or bundled. */
-const DEMO_URL = '/demo.fig'
+const DEMO_URL = `${import.meta.env.BASE_URL}demo.fig`
 const DEMO_FILE_NAME = 'Demo.fig'
 
 /**

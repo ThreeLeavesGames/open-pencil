@@ -8,6 +8,7 @@ import { recordRuntimeError } from '@/app/diagnostics'
 import { preloadFonts } from '@/app/editor/fonts'
 import { observeBootErrors } from '@/app/shell/support/boot'
 import { reportBootFailure } from '@/app/shell/support/gate'
+import { connectVSCodeHost } from '@/app/vscode-host'
 import { IS_TAURI } from '@/constants'
 
 import App from './App.vue'
@@ -36,6 +37,11 @@ export async function boot(): Promise<void> {
   app.config.errorHandler = (error, _instance, info) => {
     recordRuntimeError(error, 'vue', info)
     console.error(error)
+  }
+
+  if (window.__openPencilVSCodeHost) {
+    await connectVSCodeHost()
+    return
   }
 
   if (!IS_TAURI) {

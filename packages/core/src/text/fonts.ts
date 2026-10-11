@@ -4,6 +4,7 @@ import type { CanvasKit, TypefaceFontProvider } from 'canvaskit-wasm'
 
 import type { FontVariation, SceneGraph } from '@open-pencil/scene-graph'
 
+import { bundledAssetURL } from '#core/asset-url'
 import { DEFAULT_FONT_FAMILY, IS_BROWSER } from '#core/constants'
 import { facesFromStyles, hasFamilyFace, type FamilyFace } from '#core/text/font/faces'
 import {
@@ -304,7 +305,7 @@ export class FontManager {
 
   async fetchBundledFont(url: string): Promise<ArrayBuffer | null> {
     if (IS_BROWSER) {
-      const response = await fetch(url)
+      const response = await fetch(bundledAssetURL(url))
       return response.arrayBuffer()
     }
     const { readFile } = await import(/* @vite-ignore */ 'node:fs/promises')
