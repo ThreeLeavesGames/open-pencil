@@ -1,5 +1,6 @@
 import type { FontFaceData, RemoteFontSource, ResolveFontResult } from 'unifont'
 
+import { isBundledAssetURL } from '#core/asset-url'
 import { IS_BROWSER } from '#core/constants'
 import { parseFontStyle } from '#core/text/face'
 import type { FamilyFace } from '#core/text/font/faces'
@@ -280,7 +281,8 @@ export class WebFontResolver {
     const originalFetch = globalThis.fetch
     const proxyFetch = (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' || input instanceof URL ? input.toString() : input.url
-      if (url.startsWith('https://') || url.startsWith('http://')) {
+      const remote = url.startsWith('https://') || url.startsWith('http://')
+      if (remote && !isBundledAssetURL(url)) {
         signal?.throwIfAborted()
         return (
           this.remoteFetch?.(url, { ...init, signal: signal ?? init?.signal }) ??

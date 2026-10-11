@@ -23,9 +23,10 @@ export async function connectVSCodeHost(): Promise<void> {
   const host = window.__openPencilVSCodeHost
   if (!host) return
   host.setSave(() => getActiveStore().saveFigFile())
+  await openFileInNewTab(await host.handle.getFile(), host.handle)
+  // Watch only after the open settles; loading the file briefly counts as a change.
   watch(
     () => allTabs.value.some((tab) => tab.isDirty),
     (dirty) => host.onDirtyChange(dirty)
   )
-  await openFileInNewTab(await host.handle.getFile(), host.handle)
 }
