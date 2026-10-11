@@ -33,6 +33,8 @@ export type CollaborationRelayOptions = {
   maximumParticipants?: (documentId: string) => Promise<number | null>
   /** How long after a change the room's document is saved. */
   persistDelayMs?: number
+  /** How long a room whose last save failed waits before saving again. */
+  persistRetryMs?: number
   /** How long a socket may stay open without presenting a ticket. */
   authTimeoutMs?: number
   onError?: (message: string, error: unknown) => void
@@ -70,6 +72,7 @@ export function createCollaborationRelay(options: CollaborationRelayOptions) {
   /** Rooms whose last peer left and whose document is still being saved. */
   const closing = new Map<string, Promise<void>>()
   const persistDelayMs = options.persistDelayMs ?? 2_000
+  const persistRetryMs = options.persistRetryMs ?? 30_000
   const authTimeoutMs = options.authTimeoutMs ?? 10_000
   const report = options.onError ?? ((message, error) => console.error(`[Cloud] ${message}`, error))
 
@@ -84,8 +87,11 @@ export function createCollaborationRelay(options: CollaborationRelayOptions) {
     if (pending) return pending
     const identity = { documentId: authorization.documentId, roomEpoch: authorization.roomEpoch }
     const created = (async () => {
-      // A room reopened while its last save is in flight must load what that save writes.
+      // A room reopened while its last save is in flight must load what that save writes, or,
+      // when the save failed, take the room it kept.
       await closing.get(authorization.roomId)
+      const kept = rooms.get(authorization.roomId)
+      if (kept) return kept
       const document = new Y.Doc()
       const state = await options.store.load(identity)
       if (state) Y.applyUpdate(document, state)
@@ -108,13 +114,16 @@ export function createCollaborationRelay(options: CollaborationRelayOptions) {
     }
   }
 
-  async function persist(room: Room) {
+  /** Saves the room's document; false when the store refused it. */
+  async function persist(room: Room): Promise<boolean> {
     if (room.persistTimer) clearTimeout(room.persistTimer)
     room.persistTimer = null
     try {
       await options.store.store(room.identity, Y.encodeStateAsUpdate(room.document))
+      return true
     } catch (error) {
       report('Saving a collaboration room failed:', error)
+      return false
     }
   }
 
@@ -253,7 +262,18 @@ export function createCollaborationRelay(options: CollaborationRelayOptions) {
   async function leaveRoom(room: Room) {
     if (room.peers.size > 0 || rooms.get(room.id) !== room) return
     rooms.delete(room.id)
-    const saved = persist(room).then(() => room.document.destroy())
+    const saved = persist(room).then((stored) => {
+      if (stored) {
+        room.document.destroy()
+        return
+      }
+      // The room holds edits the store doesn't have: keep it for whoever joins next, and save
+      // again later, closing it once a save lands while nobody is in it.
+      rooms.set(room.id, room)
+      room.persistTimer = setTimeout(() => {
+        void (room.peers.size > 0 ? persist(room) : leaveRoom(room))
+      }, persistRetryMs)
+    })
     closing.set(room.id, saved)
     try {
       await saved
@@ -277,6 +297,7 @@ export function createCollaborationRelay(options: CollaborationRelayOptions) {
       const state = { closed: false, authenticating: false }
       const isClosed = () => state.closed
       const queued: Uint8Array[] = []
+      let queuedBytes = 0
       const authTimer = setTimeout(
         () => socket.close(RELAY_CLOSE.unauthorized, 'Expected a collaboration ticket'),
         authTimeoutMs
@@ -347,18 +368,31 @@ export function createCollaborationRelay(options: CollaborationRelayOptions) {
       function flush() {
         while (!state.authenticating && !state.closed && queued.length > 0) {
           const next = queued.shift()
-          if (next) process(next)
+          if (!next) continue
+          queuedBytes -= next.byteLength
+          process(next)
         }
       }
 
       return {
         receive(data) {
           if (state.closed) return
+          queuedBytes += data.byteLength
+          // Before admission a peer has sent its ticket and has nothing else to say, so what
+          // waits for the room to open is held to one message's worth.
+          if (!peer && queuedBytes > options.maximumMessageBytes) {
+            queued.length = 0
+            queuedBytes = 0
+            socket.close(RELAY_CLOSE.messageTooLarge, 'Too much sent before joining the room')
+            return
+          }
           queued.push(data)
           flush()
         },
         closed() {
           state.closed = true
+          queued.length = 0
+          queuedBytes = 0
           clearTimeout(authTimer)
           if (peer) depart(peer)
         }
