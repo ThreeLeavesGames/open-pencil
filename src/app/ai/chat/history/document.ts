@@ -15,7 +15,10 @@ export async function resolveChatDocumentId(
 ): Promise<string> {
   const handle = editor.getSourceIdentity().handle
   if (handle && !editor.getStorageBinding() && !editor.getDocumentFilePath()) {
-    const id = fileIds.get(handle) ?? (await store.resolveFile(handle))
+    // The VS Code extension's stand-in handle cannot be stored in IndexedDB; its URI is the identity.
+    const vscodeURI = (handle as { vscodeURI?: string }).vscodeURI
+    const id =
+      fileIds.get(handle) ?? (vscodeURI ? `vscode:${vscodeURI}` : await store.resolveFile(handle))
     fileIds.set(handle, id)
     return id
   }
